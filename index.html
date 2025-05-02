@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en-us">
+	<head>
+		<meta charset="utf-8">
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>PDF crop</title>
+		<link rel="stylesheet" href="style.css">
+	</head>
+	<body>
+		<div id="bg"></div>
+		<main id="main">
+			<h1>PDF crop</h1>
+			<label for="input" id="input_label">
+				<input type="file" id="input" accept="application/pdf"/>
+				Browse for PDF...
+			</label>
+			<div id="middle_container">
+				<textarea id="output" spellcheck="false"></textarea>
+			</div>
+			<div id="config_container" class="hidden flex">
+				<button id="_c_preview_view">View</button>
+			</div>
+		</main>
+		<div id="preview_container" class="popup_window hidden">
+			<div class="preview_title"><button id="_c_preview_hide">X</button></div>
+			<div id="canvas_container"></div>
+		</div>
+	</body>
+	<script type="text/javascript" src="module-init.js"></script>
+	<script type="text/javascript" src="logic.js"></script>
+	<script type="text/javascript" src="a.out.js"></script>
+</html>
