@@ -118,21 +118,45 @@ h1
 	background-color: black;
 	border-bottom: 1px solid white;
 	position: relative;
+	display: flex;
+	justify-content: space-between;
 }
 
 .preview_title button
 {
 	height: 25px;
 	width: 25px;
-	background-color: white;
-	color: black;
+	color: white;
+	border-right: 1px solid white;
 	font-family: 'Lucida Console', Monaco, monospace;
 	font-size: 1.2rem;
 	line-height: 25px;
 	text-align: center;
 	font-weight: bold;
-	position: relative;
-	left: calc(100% - 25px);
+}
+
+.preview_title #_c_preview_hide
+{
+	background-color: white;
+	color: black;
+	border-right: none;
+}
+
+canvas
+{
+	cursor: grab;
+}
+
+#canvas_container canvas
+{
+	display: block;
+	margin: 0 auto;
+	background: linear-gradient(135deg, rgb(255, 0, 0) 0%, rgba(0, 255, 0, 0.5) 50%, rgb(0, 0, 255) 100%);
+}
+
+.grabbing
+{
+	cursor: grabbing;
 }
 
 .flex
