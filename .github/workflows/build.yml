@@ -1,0 +1,56 @@
+name: Build and deploy
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up emcc
+      uses: mymindstorm/setup-emsdk@v14
+      with:
+        version: latest
+
+    - name: Build C++
+      run: |
+        cd build
+        emcc ../src/*.cpp -I../includes -L../libs -s ALLOW_MEMORY_GROWTH=1 --bind -s EXPORTED_FUNCTIONS='[_main, _malloc, _free]' -s EXPORTED_RUNTIME_METHODS='[getValue]'
+        cd ..
+
+    - name: Copy index.html
+      run: |
+        cp index.html build/index.html
+
+    - name: Copy style.css
+      run: |
+        cp style.css build/style.css
+
+    - name: Copy module-init.js
+      run: |
+        cp module-init.js build/module-init.js
+
+    - name: Copy logic.js
+      run: |
+        cp logic.js build/logic.js
+
+    - name: Create .nojekyll
+      run: |
+        touch build/.nojekyll
+
+    - name: Deploy to build branch
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_branch: build
+        publish_dir: ./build
