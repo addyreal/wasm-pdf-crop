@@ -6,13 +6,33 @@ const config_container = document.getElementById('config_container');
 const _c_preview_view = document.getElementById('_c_preview_view');
 const _c_preview_hide = document.getElementById('_c_preview_hide');
 const _c_preview_reset = document.getElementById('_c_preview_reset');
+const action_button = document.getElementById('action_button');
 
+// initialize
+var cropRect =
+{
+	x: 0,
+	y: 0,
+	lastX: 0,
+	lastY: 0,
+	w: 0,
+	h: 0,
+	vertex: 0,
+	dragging: false,
+	dragOffsetX: 0,
+	dragOffsetY: 0,
+};
+
+// first pass
 let changed = false;
 
 // Main logic
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
 pdf_input.onchange = async (e) =>
 {
+	// reset state
+	config_container.classList.add('hidden');
+
 	// file
     const file = e.target.files[0];
 	if (!file) return;
@@ -49,19 +69,16 @@ pdf_input.onchange = async (e) =>
     await renderTask.promise;
 
 	// make a cropbox
-	var cropRect =
-	{
-		x: 0,
-		y: 0,
-		lastX: 0,
-		lastY: 0,
-		w: vCanvas.width - 1,
-		h: vCanvas.height - 1,
-		vertex: 0,
-		dragging: false,
-		dragOffsetX: 0,
-		dragOffsetY: 0,
-	};
+	cropRect.x = 0;
+	cropRect.y = 0;
+	cropRect.lastX = 0;
+	cropRect.lastY = 0;
+	cropRect.w = vCanvas.width - 1;
+	cropRect.h = vCanvas.height - 1;
+	cropRect.vertex = 0;
+	cropRect.dragging = false;
+	cropRect.dragOffsetX = 0;
+	cropRect.dragOffsetY = 0;
 
 	// Pan and zoom
 	let scale = 1;
@@ -346,23 +363,6 @@ pdf_input.onchange = async (e) =>
 	canvas.addEventListener('touchend', ()=>{mobileEnd()}, {passive: false});
 	canvas.addEventListener('touchcancel', ()=>{mobileEnd()}, {passive: false});
 
-	// get pixel of page
-	canvas.addEventListener('click', function (e)
-	{
-		const rect = canvas.getBoundingClientRect();
-		const mouseX = e.clientX - rect.left;
-		const mouseY = e.clientY - rect.top;
-	
-		const pdfX = Math.floor((mouseX - offsetX) / scale);
-		const pdfY = Math.floor((mouseY - offsetY) / scale);
-	
-		if (pdfX >= 0 && pdfY >= 0 && pdfX < vCanvas.width && pdfY < vCanvas.height) {
-			// pixel data
-			const pixelData = vContext.getImageData(pdfX, pdfY, 1, 1).data;
-			console.log(`pxs: (${pdfX}, ${pdfY}), rgba: (${pixelData[0]}, ${pixelData[1]}, ${pixelData[2]}, ${pixelData[3]})`);
-		}
-	});
-
 	draw();
 
 	// Enable configging
@@ -415,4 +415,16 @@ _c_preview_hide.addEventListener('click', function()
 {
 	preview_container.classList.toggle('hidden');
 	main.classList.toggle('blurred');
+});
+
+// Send request
+action_button.addEventListener('click', function()
+{
+	clearOutput(outputElement);
+	resizeOutput(outputElement);
+	
+	console.log(Math.round(cropRect.x));
+	console.log(Math.round(cropRect.y));
+	console.log(Math.round(cropRect.w));
+	console.log(Math.round(cropRect.h));
 });
