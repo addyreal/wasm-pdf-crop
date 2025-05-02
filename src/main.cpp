@@ -2,7 +2,15 @@
 
 int main(void)
 {
-	std::cout << "Hello" << std::endl;
+	std::cout << "Waiting for input..." << std::endl;
 
 	return 0;
+}
+
+extern "C"
+{
+	void somefunction()
+	{
+		return;
+	}
 }
