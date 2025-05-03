@@ -16,6 +16,10 @@
 				<input type="file" id="input" accept="application/pdf"/>
 				Browse for PDF...
 			</label>
+			<label for="highdpi">
+				<input type="checkbox" name="" id="highdpi">
+				Ultra high precision
+			</label>
 			<div id="middle_container">
 				<textarea id="output" spellcheck="false"></textarea>
 			</div>
@@ -26,7 +30,10 @@
 		</main>
 		<div id="preview_container" class="popup_window hidden">
 			<div class="preview_title"><button id="_c_preview_reset">&#x21bb;</button><button id="_c_preview_hide">X</button></div>
-			<div id="canvas_container"></div>
+			<div id="preview_canvas"></div>
+			<div id="multipage_help" class="hidden">
+				<button id="multipage_prev">&larr;</button><span id="multipage_count">1</span><button id="multipage_next">&rarr;</button>
+			</div>
 		</div>
 	</body>
 	<script type="text/javascript" src="module-init.js"></script>

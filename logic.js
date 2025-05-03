@@ -1,43 +1,89 @@
 const main = document.getElementById('main');
 const pdf_input = document.getElementById('input');
+const highdpi = document.getElementById('highdpi');
 const preview_container = document.getElementById('preview_container');
-const canvas_container = document.getElementById('canvas_container');
-const config_container = document.getElementById('config_container');
+const preview_canvas = document.getElementById('preview_canvas');
 const _c_preview_view = document.getElementById('_c_preview_view');
 const _c_preview_hide = document.getElementById('_c_preview_hide');
 const _c_preview_reset = document.getElementById('_c_preview_reset');
+const config_container = document.getElementById('config_container');
+const multipage_help = document.getElementById('multipage_help');
+const multipage_prev = document.getElementById('multipage_prev');
+const multipage_next = document.getElementById('multipage_next');
+const multipage_count = document.getElementById('multipage_count');
 const action_button = document.getElementById('action_button');
 
-// initialize
+// -------------------- CROPPING ---------------------------
+
+// Rendered crop helper
 var cropRect =
 {
 	x: 0,
 	y: 0,
-	lastX: 0,
-	lastY: 0,
 	w: 0,
 	h: 0,
+	lastX: 0,
+	lastY: 0,
+	offsetX: 0,
+	offsetY: 0,
 	vertex: 0,
 	dragging: false,
-	dragOffsetX: 0,
-	dragOffsetY: 0,
 };
 
-// copy from promise
-var buffer = null;
+// Stored crop preferences
+var cropArray = 
+{
+	current: 1,
+	total: 1,
+	saved: [{a: 0, b: 0, c: 0, d: 0,},],
+};
 
-// height
-var initHeight = 0;
+// Takes index you're on, saves ready values
+function saveCurrentCrop(h)
+{
+	const arrIndex = cropArray.current - 1;
+	const a = Math.round(cropRect.x);
+	const b = h - Math.round(cropRect.h) - Math.round(cropRect.y);
+	const c = Math.round(cropRect.w);
+	const d = Math.round(cropRect.h);
+	cropArray.saved[arrIndex] = {a, b, c, d};
+}
+
+// Resets current crop
+function resetCurrentCrop(box)
+{
+	cropRect =
+	{
+		x: 0,
+		y: 0,
+		w: box.width - 1,
+		h: box.height - 1,
+		lastX: 0,
+		lastY: 0,
+		offsetX: 0,
+		offsetY: 0,
+		vertex: 0,
+		dragging: false,
+	};
+}
+
+// ---------------------------------------------------------
+
+// Global
+var fileBuffer = null;
+var pageHeight = 0;
 
 // first pass
+var CONST_DPI = 144;
 let changed = false;
 
 // Main logic
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
 pdf_input.onchange = async (e) =>
 {
-	// reset state
+	// reset states
 	config_container.classList.add('hidden');
+	multipage_help.classList.add('hidden');
 
 	// file
     const file = e.target.files[0];
@@ -45,18 +91,19 @@ pdf_input.onchange = async (e) =>
 
 	// buffer
 	const arrBuffer = await file.arrayBuffer();
-	buffer = arrBuffer.slice(0);
+	fileBuffer = arrBuffer.slice(0);
 
 	// 1st page
 	const pdf = await pdfjsLib.getDocument({data: arrBuffer}).promise;
+	const num_pages = pdf.numPages;
     const page = await pdf.getPage(1);
 
 	// make main canvas
 	const canvas = document.createElement('canvas');
 	const context = canvas.getContext('2d');
 	context.imageSmoothingEnabled = false;
-	canvas_container.innerHTML = '';
-	canvas_container.appendChild(canvas);
+	preview_canvas.innerHTML = '';
+	preview_canvas.appendChild(canvas);
 
 	// make virtual canvas
 	const vCanvas = document.createElement('canvas');
@@ -64,7 +111,7 @@ pdf_input.onchange = async (e) =>
 	vContext.imageSmoothingEnabled = false;
 
 	// get viewport
-	const pdf_scale = 1;
+	const pdf_scale = CONST_DPI/72;
 	const viewport = page.getViewport({scale: pdf_scale});
 	canvas.width = viewport.width >= 600 ? 600 : viewport.width;
 	canvas.height = viewport.height >= 600 ? 600: viewport.height;
@@ -72,7 +119,7 @@ pdf_input.onchange = async (e) =>
 	vCanvas.height = viewport.height;
 
 	// height
-	initHeight = viewport.height;
+	pageHeight = viewport.height;
 
 	// render page into vcanvas
 	const renderTask = page.render({canvasContext: vContext, viewport});
@@ -81,21 +128,29 @@ pdf_input.onchange = async (e) =>
 	// make a cropbox
 	cropRect.x = 0;
 	cropRect.y = 0;
-	cropRect.lastX = 0;
-	cropRect.lastY = 0;
 	cropRect.w = vCanvas.width - 1;
 	cropRect.h = vCanvas.height - 1;
+	cropRect.lastX = 0;
+	cropRect.lastY = 0;
+	cropRect.offsetX = 0;
+	cropRect.offsetY = 0;
 	cropRect.vertex = 0;
 	cropRect.dragging = false;
-	cropRect.dragOffsetX = 0;
-	cropRect.dragOffsetY = 0;
+
+	// make crop array
+	cropArray = 
+	{
+		current: 1,
+		total: num_pages,
+		saved: Array.from({length: num_pages}, () => ({ a: 0, b: 0, c: 0, d: 0 })),
+	};
 
 	// Pan and zoom
+	let lastX = 0;
+	let lastY = 0;
 	let scale = 1;
 	let offsetX = 0;
 	let offsetY = 0;
-	let lastX = 0;
-	let lastY = 0;
 	let isDragging = false;
 	let isTouchZooming = false;
 	function draw()
@@ -199,8 +254,8 @@ pdf_input.onchange = async (e) =>
 		{
 			cropRect.lastX = (mouseX - offsetX) / scale;
 			cropRect.lastY = (mouseY - offsetY) / scale;
-			cropRect.dragOffsetX = 0;
-			cropRect.dragOffsetY = 0;
+			cropRect.offsetX = 0;
+			cropRect.offsetY = 0;
 			cropRect.vertex = 1;
 			cropRect.dragging = true;
 		}
@@ -212,8 +267,8 @@ pdf_input.onchange = async (e) =>
 		{
 			cropRect.lastX = (mouseX - offsetX) / scale;
 			cropRect.lastY = (mouseY - offsetY) / scale;
-			cropRect.dragOffsetX = 0;
-			cropRect.dragOffsetY = 0;
+			cropRect.offsetX = 0;
+			cropRect.offsetY = 0;
 			cropRect.vertex = 2;
 			cropRect.dragging = true;
 		}
@@ -225,8 +280,8 @@ pdf_input.onchange = async (e) =>
 		{
 			cropRect.lastX = (mouseX - offsetX) / scale;
 			cropRect.lastY = (mouseY - offsetY) / scale;
-			cropRect.dragOffsetX = 0;
-			cropRect.dragOffsetY = 0;
+			cropRect.offsetX = 0;
+			cropRect.offsetY = 0;
 			cropRect.vertex = 3;
 			cropRect.dragging = true;
 		}
@@ -238,8 +293,8 @@ pdf_input.onchange = async (e) =>
 		{
 			cropRect.lastX = (mouseX - offsetX) / scale;
 			cropRect.lastY = (mouseY - offsetY) / scale;
-			cropRect.dragOffsetX = 0;
-			cropRect.dragOffsetY = 0;
+			cropRect.offsetX = 0;
+			cropRect.offsetY = 0;
 			cropRect.vertex = 4;
 			cropRect.dragging = true;
 		}
@@ -258,8 +313,8 @@ pdf_input.onchange = async (e) =>
 
 		if(cropRect.dragging == true)
 		{
-			const newX = (mouseX - cropRect.dragOffsetX - offsetX) / scale;
-			const newY = (mouseY - cropRect.dragOffsetY - offsetY) / scale;
+			const newX = (mouseX - cropRect.offsetX - offsetX) / scale;
+			const newY = (mouseY - cropRect.offsetY - offsetY) / scale;
 
 			let dx = newX - cropRect.lastX;
 			let dy = newY - cropRect.lastY;
@@ -377,6 +432,11 @@ pdf_input.onchange = async (e) =>
 
 	// Enable configging
 	config_container.classList.remove('hidden');
+	if(num_pages > 1)
+	{
+		multipage_help.classList.remove('hidden');
+		multipage_count.innerHTML = cropArray.current + '/' + cropArray.total;
+	}
 
 	if(!changed)
 	{
@@ -392,19 +452,7 @@ pdf_input.onchange = async (e) =>
 			isTouchZooming = false;
 
 			// crop reset
-			cropRect =
-			{
-				x: 0,
-				y: 0,
-				lastX: 0,
-				lastY: 0,
-				w: vCanvas.width - 1,
-				h: vCanvas.height - 1,
-				vertex: 0,
-				dragging: false,
-				dragOffsetX: 0,
-				dragOffsetY: 0,
-			};
+			resetCurrentCrop(vCanvas);
 
 			draw();
 		})
@@ -423,11 +471,38 @@ _c_preview_view.addEventListener('click', function()
 // Hide preview
 _c_preview_hide.addEventListener('click', function()
 {
+	saveCurrentCrop();
 	preview_container.classList.toggle('hidden');
 	main.classList.toggle('blurred');
 });
 
-// Send request
+// Prev page preview
+multipage_prev.addEventListener('click', function()
+{
+	if(cropArray.current != 1)
+	{
+		saveCurrentCrop();
+		// reset croprect
+		// render next page
+		cropArray.current -= 1;
+		multipage_count.innerHTML = cropArray.current + '/' + cropArray.total;
+	}
+});
+
+// Next page preview
+multipage_next.addEventListener('click', function()
+{
+	if(cropArray.current != cropArray.total)
+	{
+		saveCurrentCrop();
+		// reset croprect
+		// render next page
+		cropArray.current += 1;
+		multipage_count.innerHTML = cropArray.current + '/' + cropArray.total;
+	}
+});
+
+// Process
 action_button.addEventListener('click', function()
 {
 	clearOutput(outputElement);
@@ -435,14 +510,13 @@ action_button.addEventListener('click', function()
 
 	(async() =>{
 		const {PDFDocument} = PDFLib;
-		const pdfDoc = await PDFDocument.load(buffer);
+		const pdfDoc = await PDFDocument.load(fileBuffer);
 
 		const page = pdfDoc.getPage(0);
-		const dpi = 72;
-		const toPt = (px) => px * (72/dpi);
+		const toPt = (px) => px * (72/CONST_DPI);
 
 		const a = Math.round(cropRect.x);
-		const b = initHeight - Math.round(cropRect.h) - Math.round(cropRect.y);
+		const b = pageHeight - Math.round(cropRect.h) - Math.round(cropRect.y);
 		const c = Math.round(cropRect.w);
 		const d = Math.round(cropRect.h);
 
@@ -458,4 +532,19 @@ action_button.addEventListener('click', function()
 		link.click();
 		URL.revokeObjectURL(link.href);
 	})();
+});
+
+// High dpi config
+highdpi.addEventListener('change', (e) =>
+{
+	if(e.target.checked)
+	{
+		CONST_DPI = 288;
+	}
+	else
+	{
+		CONST_DPI = 144;
+	}
+
+	// must reset everything
 });

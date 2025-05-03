@@ -49,7 +49,8 @@ h1
 	margin: 0 0 25px 0;
 }
 
-#output {
+#output
+{
 	display: block;
 	background-color: #222222;
 	font-family: 'Lucida Console', Monaco, monospace;
@@ -71,6 +72,14 @@ h1
 	display: none;
 }
 
+label
+{
+	font-family: 'Lucida Console', Monaco, monospace;
+	font-size: 1.2rem;
+	color: white;
+	cursor: pointer;
+}
+
 #input_label
 {
 	display: block;
@@ -79,6 +88,7 @@ h1
 	color: white;
 	text-decoration: underline;
 	cursor: pointer;
+	margin-bottom: 15px;
 }
 
 #config_container
@@ -142,12 +152,51 @@ h1
 	border-right: none;
 }
 
+#multipage_help
+{
+	height: 25px;
+	width: 100%;
+	background-color: black;
+	border-top: 1px solid white;
+	position: relative;
+	display: flex;
+	justify-content: space-between;
+}
+#multipage_help.hidden
+{
+	display: none;
+}
+
+#multipage_help>*
+{
+	font-size: 1.2rem;
+	line-height: 25px;
+	text-align: center;
+}
+
+#multipage_help>button
+{
+	height: 25px;
+	width: 25px;
+	font-weight: bold;
+}
+
+#multipage_prev
+{
+	border-right: 1px solid white;
+}
+
+#multipage_next
+{
+	border-left: 1px solid white;
+}
+
 canvas
 {
 	cursor: grab;
 }
 
-#canvas_container canvas
+#preview_canvas canvas
 {
 	display: block;
 	margin: 0 auto;
