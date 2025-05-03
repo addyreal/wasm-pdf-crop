@@ -23,6 +23,12 @@ var cropRect =
 	dragOffsetY: 0,
 };
 
+// copy from promise
+var buffer = null;
+
+// height
+var initHeight = 0;
+
 // first pass
 let changed = false;
 
@@ -38,10 +44,11 @@ pdf_input.onchange = async (e) =>
 	if (!file) return;
 
 	// buffer
-	const buffer = await file.arrayBuffer();
+	const arrBuffer = await file.arrayBuffer();
+	buffer = arrBuffer.slice(0);
 
 	// 1st page
-	const pdf = await pdfjsLib.getDocument({data: buffer}).promise;
+	const pdf = await pdfjsLib.getDocument({data: arrBuffer}).promise;
     const page = await pdf.getPage(1);
 
 	// make main canvas
@@ -63,6 +70,9 @@ pdf_input.onchange = async (e) =>
 	canvas.height = viewport.height >= 600 ? 600: viewport.height;
 	vCanvas.width = viewport.width;
 	vCanvas.height = viewport.height;
+
+	// height
+	initHeight = viewport.height;
 
 	// render page into vcanvas
 	const renderTask = page.render({canvasContext: vContext, viewport});
@@ -422,9 +432,30 @@ action_button.addEventListener('click', function()
 {
 	clearOutput(outputElement);
 	resizeOutput(outputElement);
-	
-	console.log(Math.round(cropRect.x));
-	console.log(Math.round(cropRect.y));
-	console.log(Math.round(cropRect.w));
-	console.log(Math.round(cropRect.h));
+
+	(async() =>{
+		const {PDFDocument} = PDFLib;
+		const pdfDoc = await PDFDocument.load(buffer);
+
+		const page = pdfDoc.getPage(0);
+		const dpi = 72;
+		const toPt = (px) => px * (72/dpi);
+
+		const a = Math.round(cropRect.x);
+		const b = initHeight - Math.round(cropRect.h) - Math.round(cropRect.y);
+		const c = Math.round(cropRect.w);
+		const d = Math.round(cropRect.h);
+
+		page.setCropBox(toPt(a), toPt(b), toPt(c), toPt(d));
+
+		newBytes = await pdfDoc.save();
+
+		// bob
+		const bob = new Blob([newBytes], {type: 'application/pdf'});
+		const link = document.createElement('a');
+		link.href = URL.createObjectURL(bob);
+		link.download = 'cropped.pdf';
+		link.click();
+		URL.revokeObjectURL(link.href);
+	})();
 });
