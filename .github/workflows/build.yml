@@ -44,10 +44,11 @@ jobs:
       run: |
         cp logic.js build/logic.js
 
-    - name: Copy pdf.js
+    - name: Copy pdf stuff
       run: |
         cp pdf.min.js build/pdf.min.js
         cp pdf.worker.min.js build/pdf.worker.min.js
+        cp pdf-lib.min.js build/pdf-lib.min.js
 
     - name: Create .nojekyll
       run: |
