@@ -1,6 +1,7 @@
+// DOM
 const main = document.getElementById('main');
 const pdf_input = document.getElementById('input');
-const highdpi = document.getElementById('highdpi');
+const _c_highdpi = document.getElementById('_c_highdpi');
 const preview_container = document.getElementById('preview_container');
 const preview_canvas = document.getElementById('preview_canvas');
 const _c_preview_view = document.getElementById('_c_preview_view');
@@ -12,6 +13,193 @@ const multipage_prev = document.getElementById('multipage_prev');
 const multipage_next = document.getElementById('multipage_next');
 const multipage_count = document.getElementById('multipage_count');
 const action_button = document.getElementById('action_button');
+
+// Global
+var fileBuffer = null;
+var pageHeight = 0;
+
+// -------------------- CANVAS -----------------------------
+
+// Main canvas
+const canvas = document.getElementById('canvas');
+const context = canvas.getContext('2d');
+context.imageSmoothingEnabled = false;
+
+// Virtual canvas
+const vCanvas = document.createElement('canvas');
+const vContext = vCanvas.getContext('2d');
+vContext.imageSmoothingEnabled = false;
+
+// Constants
+var CONST_DPI = 144;
+const CONST_CROPTHICKNESS = 1;
+const CONST_ZOOMFACTOR = 1.1;
+const CONST_MOBILEZOOMFACTOR = 1.05;
+
+// Draw, vCanvas into canvas
+function draw()
+{
+	// draw pdf
+	context.setTransform(1, 0, 0, 1, 0, 0);
+	context.clearRect(0, 0, canvas.width, canvas.height);
+	context.imageSmoothingEnabled = false;
+	context.setTransform(previewWindow.scale, 0, 0, previewWindow.scale, previewWindow.offsetX, previewWindow.offsetY);
+	context.drawImage(vCanvas, 0, 0);
+
+	// draw crop
+	context.setTransform(1, 0, 0, 1, 0, 0);
+	const cropX = Math.round(cropRect.x) * previewWindow.scale + previewWindow.offsetX + CONST_CROPTHICKNESS/2 * previewWindow.scale;
+	const cropY = Math.round(cropRect.y) * previewWindow.scale + previewWindow.offsetY + CONST_CROPTHICKNESS/2 * previewWindow.scale;
+	const cropW = Math.round(cropRect.w) * previewWindow.scale;
+	const cropH = Math.round(cropRect.h) * previewWindow.scale;
+
+	context.save();
+	context.fillStyle = 'rgba(0, 0, 0, 0.4)';
+	context.fillRect(cropX - CONST_CROPTHICKNESS/2 * previewWindow.scale, cropY - CONST_CROPTHICKNESS/2 * previewWindow.scale, cropW, cropH);
+	context.restore();
+
+	context.strokeStyle = 'rgba(255, 0, 0 , 0.6)';
+	context.lineWidth = CONST_CROPTHICKNESS * previewWindow.scale;
+	context.strokeRect(cropX, cropY, cropW, cropH);
+}
+
+// Click
+function press(x, y)
+{
+	const rect = canvas.getBoundingClientRect();
+	previewWindow.isDragging = true;
+	previewWindow.isTouchZooming = false;
+	previewWindow.lastX = x - rect.left;
+	previewWindow.lastY = y - rect.top;
+}
+
+// Move
+function move(x, y)
+{
+	if(!previewWindow.isDragging || previewWindow.isTouchZooming) return;
+	const rect = canvas.getBoundingClientRect();
+
+	const dx = x - rect.left - previewWindow.lastX;
+	const dy = y - rect.top - previewWindow.lastY;
+
+	previewWindow.offsetX += dx;
+	previewWindow.offsetY += dy;
+
+	previewWindow.lastX = x - rect.left;
+	previewWindow.lastY = y - rect.top;
+
+	draw();
+}
+
+// Zoom
+function zoom(e)
+{
+	const rect = canvas.getBoundingClientRect();
+
+	const mouseX = e.clientX - rect.left;
+	const mouseY = e.clientY - rect.top;
+	const scaleFactor = e.deltaY <= 0 ? CONST_ZOOMFACTOR : 1 / CONST_ZOOMFACTOR;
+
+	const worldX = (mouseX - previewWindow.offsetX) / previewWindow.scale;
+	const worldY = (mouseY - previewWindow.offsetY) / previewWindow.scale;
+
+	previewWindow.scale *= scaleFactor;
+
+	previewWindow.offsetX = mouseX - worldX * previewWindow.scale;
+	previewWindow.offsetY = mouseY - worldY * previewWindow.scale;
+
+	draw();
+}
+
+// End
+function end()
+{
+	previewWindow.isDragging = false;
+	cropRect.dragging = false;
+	canvas.classList.remove('grabbing');
+}
+
+// Mobile
+function getTouchesDist(touch1, touch2)
+{
+	const dx = touch1.clientX - touch2.clientX;
+	const dy = touch1.clientY - touch2.clientY;
+	return Math.hypot(dx, dy);
+}
+function getTouchesX(touch1, touch2)
+{
+	return (touch1.clientX + touch2.clientX)/2;
+}
+function getTouchesY(touch1, touch2)
+{
+	return (touch1.clientY + touch2.clientY)/2;
+}
+function mobileStartZoom(touch1, touch2)
+{
+	previewWindow.isDragging = false;
+	previewWindow.isTouchZooming = true;
+	previewWindow.lastTouchesDist = getTouchesDist(touch1, touch2);
+}
+function mobileZoom(touch1, touch2)
+{
+	const rect = canvas.getBoundingClientRect();
+
+	const touchX = getTouchesX(touch1, touch2) - rect.left;
+	const touchY = getTouchesY(touch1, touch2) - rect.top;
+	const scaleFactor = getTouchesDist(touch1, touch2) - previewWindow.lastTouchesDist <= 0 ? 1 / CONST_MOBILEZOOMFACTOR : CONST_MOBILEZOOMFACTOR;
+
+	const worldX = (touchX - previewWindow.offsetX) / previewWindow.scale;
+	const worldY = (touchY - previewWindow.offsetY) / previewWindow.scale;
+
+	previewWindow.scale *= scaleFactor;
+
+	previewWindow.offsetX = touchX - worldX * previewWindow.scale;
+	previewWindow.offsetY = touchY - worldY * previewWindow.scale;
+
+	previewWindow.lastTouchesDist = getTouchesDist(touch1, touch2);
+
+	draw();
+}
+function mobileEnd()
+{
+	previewWindow.isDragging = false;
+	previewWindow.isTouchZooming = false;
+}
+
+// ---------------------------------------------------------
+
+// -------------------- PREVIEW ----------------------------
+
+// Preview window stuff
+var previewWindow =
+{
+	scale: 1,
+	lastTouchesDist: 0,
+	lastX: 0,
+	lastY: 0,
+	offsetX: 0,
+	offsetY: 0,
+	isDragging: false,
+	isTouchZooming: false,
+};
+
+// Resets current crop
+function resetPreviewWindow()
+{
+	previewWindow =
+	{
+		scale: 1,
+		lastTouchesDist: 0,
+		lastX: 0,
+		lastY: 0,
+		offsetX: 0,
+		offsetY: 0,
+		isDragging: false,
+		isTouchZooming: false,
+	};
+}
+
+// ---------------------------------------------------------
 
 // -------------------- CROPPING ---------------------------
 
@@ -39,11 +227,11 @@ var cropArray =
 };
 
 // Takes index you're on, saves ready values
-function saveCurrentCrop(h)
+function saveCurrentCrop(height)
 {
 	const arrIndex = cropArray.current - 1;
 	const a = Math.round(cropRect.x);
-	const b = h - Math.round(cropRect.h) - Math.round(cropRect.y);
+	const b = height - Math.round(cropRect.h) - Math.round(cropRect.y);
 	const c = Math.round(cropRect.w);
 	const d = Math.round(cropRect.h);
 	cropArray.saved[arrIndex] = {a, b, c, d};
@@ -67,52 +255,41 @@ function resetCurrentCrop(box)
 	};
 }
 
+function resetCropArray(len)
+{
+	cropArray = 
+	{
+		current: 1,
+		total: len,
+		saved: Array.from({length: len}, () => ({a: 0, b: 0, c: 0, d: 0})),
+	};
+}
+
 // ---------------------------------------------------------
-
-// Global
-var fileBuffer = null;
-var pageHeight = 0;
-
-// first pass
-var CONST_DPI = 144;
-let changed = false;
 
 // Main logic
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
 pdf_input.onchange = async (e) =>
 {
-	// reset states
+	// Disable UI (reset)
 	config_container.classList.add('hidden');
 	multipage_help.classList.add('hidden');
 
-	// file
+	// File
     const file = e.target.files[0];
 	if (!file) return;
 
-	// buffer
+	// Buffer
 	const arrBuffer = await file.arrayBuffer();
 	fileBuffer = arrBuffer.slice(0);
 
-	// 1st page
+	// Set up first pdf page
 	const pdf = await pdfjsLib.getDocument({data: arrBuffer}).promise;
 	const num_pages = pdf.numPages;
     const page = await pdf.getPage(1);
 
-	// make main canvas
-	const canvas = document.createElement('canvas');
-	const context = canvas.getContext('2d');
-	context.imageSmoothingEnabled = false;
-	preview_canvas.innerHTML = '';
-	preview_canvas.appendChild(canvas);
-
-	// make virtual canvas
-	const vCanvas = document.createElement('canvas');
-	const vContext = vCanvas.getContext('2d');
-	vContext.imageSmoothingEnabled = false;
-
-	// get viewport
-	const pdf_scale = CONST_DPI/72;
-	const viewport = page.getViewport({scale: pdf_scale});
+	// Set up canvases
+	const viewport = page.getViewport({scale: CONST_DPI/72});
 	canvas.width = viewport.width >= 600 ? 600 : viewport.width;
 	canvas.height = viewport.height >= 600 ? 600: viewport.height;
 	vCanvas.width = viewport.width;
@@ -121,345 +298,222 @@ pdf_input.onchange = async (e) =>
 	// height
 	pageHeight = viewport.height;
 
-	// render page into vcanvas
+	// Render first page
 	const renderTask = page.render({canvasContext: vContext, viewport});
     await renderTask.promise;
 
-	// make a cropbox
-	cropRect.x = 0;
-	cropRect.y = 0;
-	cropRect.w = vCanvas.width - 1;
-	cropRect.h = vCanvas.height - 1;
-	cropRect.lastX = 0;
-	cropRect.lastY = 0;
-	cropRect.offsetX = 0;
-	cropRect.offsetY = 0;
-	cropRect.vertex = 0;
-	cropRect.dragging = false;
+	// Set up a cropbox
+	resetCurrentCrop(vCanvas);
 
-	// make crop array
-	cropArray = 
-	{
-		current: 1,
-		total: num_pages,
-		saved: Array.from({length: num_pages}, () => ({ a: 0, b: 0, c: 0, d: 0 })),
-	};
+	// Initialize crop array
+	resetCropArray(num_pages);
 
-	// Pan and zoom
-	let lastX = 0;
-	let lastY = 0;
-	let scale = 1;
-	let offsetX = 0;
-	let offsetY = 0;
-	let isDragging = false;
-	let isTouchZooming = false;
-	function draw()
-	{
-		// draw pdf
-		context.setTransform(1, 0, 0, 1, 0, 0);
-		context.clearRect(0, 0, canvas.width, canvas.height);
-		context.imageSmoothingEnabled = false;
-		context.setTransform(scale, 0, 0, scale, offsetX, offsetY);
-		context.drawImage(vCanvas, 0, 0);
+	// Reset preview window
+	resetPreviewWindow();
 
-		// draw crop
-		context.setTransform(1, 0, 0, 1, 0, 0);
-		const cropX = Math.round(cropRect.x) * scale + offsetX + 0.5 * scale;
-		const cropY = Math.round(cropRect.y) * scale + offsetY + 0.5 * scale;
-		const cropW = Math.round(cropRect.w) * scale;
-		const cropH = Math.round(cropRect.h) * scale;
-
-		context.save();
-		context.fillStyle = 'rgba(0, 0, 0, 0.4)';
-		context.fillRect(cropX - 0.5*scale, cropY - 0.5*scale, cropW, cropH);
-		context.restore();
-
-		context.strokeStyle = 'rgba(255, 0, 0 , 0.6)';
-		context.lineWidth = 1 * scale;
-		context.strokeRect(cropX, cropY, cropW, cropH);
-	}
-	// Zoom gesture
-	function zoom(e)
-	{
-		const rect = canvas.getBoundingClientRect();
-	
-		const zoomFactor = 1.1;
-		const mouseX = e.clientX - rect.left;
-		const mouseY = e.clientY - rect.top;
-		const scaleFactor = e.deltaY <= 0 ? zoomFactor : 1 / zoomFactor;
-	
-		const worldX = (mouseX - offsetX) / scale;
-		const worldY = (mouseY - offsetY) / scale;
-	
-		scale *= scaleFactor;
-	
-		offsetX = mouseX - worldX * scale;
-		offsetY = mouseY - worldY * scale;
-	
-		draw();
-	}
-	// Press
-	function press(x, y)
-	{
-		const rect = canvas.getBoundingClientRect();
-		isDragging = true;
-		isTouchZooming = false;
-		lastX = x - rect.left;
-		lastY = y - rect.top;
-	}
-	// Move
-	function move(x, y)
-	{
-		if(!isDragging || isTouchZooming) return;
-		const rect = canvas.getBoundingClientRect();
-
-		const dx = x - rect.left - lastX;
-		const dy = y - rect.top - lastY;
-
-		offsetX += dx;
-		offsetY += dy;
-
-		lastX = x - rect.left;
-		lastY = y - rect.top;
-
-		draw();
-	}
-	// End
-	function end()
-	{
-		isDragging = false;
-		cropRect.dragging = false;
-		canvas.classList.remove('grabbing');
-	}
-	// PC implementation
-	canvas.addEventListener('wheel', (e)=>{e.preventDefault();zoom(e)});
-	canvas.addEventListener('mousedown', (e)=>
-	{
-		canvas.classList.add('grabbing');
-		const rect = canvas.getBoundingClientRect();
-		const mouseX = e.clientX - rect.left;
-		const mouseY = e.clientY - rect.top;
-
-		const cropX = cropRect.x * scale + offsetX;
-		const cropY = cropRect.y * scale + offsetY;
-		const cropW = cropRect.w * scale;
-		const cropH = cropRect.h * scale;
-
-		// set which vertex of cropbox youre dragging
-		if(
-			mouseX >= cropX - scale - 10 &&
-			mouseX <= cropX + scale + 10 &&
-			mouseY >= cropY - scale - 10 &&
-			mouseY <= cropY + scale + 10)
-		{
-			cropRect.lastX = (mouseX - offsetX) / scale;
-			cropRect.lastY = (mouseY - offsetY) / scale;
-			cropRect.offsetX = 0;
-			cropRect.offsetY = 0;
-			cropRect.vertex = 1;
-			cropRect.dragging = true;
-		}
-		else if(
-			mouseX >= cropX + cropW - scale - 10 &&
-			mouseX <= cropX + cropW + scale + 10 &&
-			mouseY >= cropY - scale - 10 &&
-			mouseY <= cropY + scale + 10)
-		{
-			cropRect.lastX = (mouseX - offsetX) / scale;
-			cropRect.lastY = (mouseY - offsetY) / scale;
-			cropRect.offsetX = 0;
-			cropRect.offsetY = 0;
-			cropRect.vertex = 2;
-			cropRect.dragging = true;
-		}
-		else if(
-			mouseX >= cropX - scale - 10 &&
-			mouseX <= cropX + scale + 10 &&
-			mouseY >= cropY + cropH - scale - 10 &&
-			mouseY <= cropY + cropH + scale + 10)
-		{
-			cropRect.lastX = (mouseX - offsetX) / scale;
-			cropRect.lastY = (mouseY - offsetY) / scale;
-			cropRect.offsetX = 0;
-			cropRect.offsetY = 0;
-			cropRect.vertex = 3;
-			cropRect.dragging = true;
-		}
-		else if(
-			mouseX >= cropX + cropW - scale - 10 &&
-			mouseX <= cropX + cropW + scale + 10 &&
-			mouseY >= cropY + cropH - scale - 10 &&
-			mouseY <= cropY + cropH + scale + 10)
-		{
-			cropRect.lastX = (mouseX - offsetX) / scale;
-			cropRect.lastY = (mouseY - offsetY) / scale;
-			cropRect.offsetX = 0;
-			cropRect.offsetY = 0;
-			cropRect.vertex = 4;
-			cropRect.dragging = true;
-		}
-		// normal 
-		else
-		{
-			press(e.clientX, e.clientY);
-		}
-	});
-	canvas.addEventListener('mousemove', (e)=>
-	{
-		e.preventDefault();
-		const rect = canvas.getBoundingClientRect();
-		const mouseX = e.clientX - rect.left;
-		const mouseY = e.clientY - rect.top;
-
-		if(cropRect.dragging == true)
-		{
-			const newX = (mouseX - cropRect.offsetX - offsetX) / scale;
-			const newY = (mouseY - cropRect.offsetY - offsetY) / scale;
-
-			let dx = newX - cropRect.lastX;
-			let dy = newY - cropRect.lastY;
-
-			switch(cropRect.vertex)
-			{
-				case 1:
-					cropRect.x += dx;
-					cropRect.y += dy;
-					cropRect.w -= dx;
-					cropRect.h -= dy;
-					break;
-				case 2:
-					cropRect.y += dy;
-					cropRect.w += dx;
-					cropRect.h -= dy;
-					break;
-				case 3:
-					cropRect.x += dx;
-					cropRect.w -= dx;
-					cropRect.h += dy;
-					break;
-				case 4:
-					cropRect.w += dx;
-					cropRect.h += dy;
-					break;
-			}
-
-			cropRect.lastX = newX;
-			cropRect.lastY = newY;
-
-			draw();
-		}
-
-		move(e.clientX, e.clientY);
-	});
-	canvas.addEventListener('mouseup', ()=>{end()});
-	canvas.addEventListener('mouseleave', ()=>{end()});
-	// Mobile implementation
-	let lastTouchesDist = 0;
-	function getTouchesDist(touch1, touch2)
-	{
-		const dx = touch1.clientX - touch2.clientX;
-		const dy = touch1.clientY - touch2.clientY;
-		return Math.hypot(dx, dy);
-	}
-	function getTouchesX(touch1, touch2)
-	{
-		return (touch1.clientX + touch2.clientX)/2
-	}
-	function getTouchesY(touch1, touch2)
-	{
-		return (touch1.clientY + touch2.clientY)/2
-	}
-	function mobileStartZoom(touch1, touch2)
-	{
-		isDragging = false;
-		isTouchZooming = true;
-		lastTouchesDist = getTouchesDist(touch1, touch2);
-	}
-	function mobileZoom(touch1, touch2)
-	{
-		const rect = canvas.getBoundingClientRect();
-	
-		const zoomFactor = 1.05;
-		const touchX = getTouchesX(touch1, touch2) - rect.left;
-		const touchY = getTouchesY(touch1, touch2) - rect.top;
-		const scaleFactor = getTouchesDist(touch1, touch2) - lastTouchesDist <= 0 ? 1 / zoomFactor : zoomFactor;
-	
-		const worldX = (touchX - offsetX) / scale;
-		const worldY = (touchY - offsetY) / scale;
-	
-		scale *= scaleFactor;
-	
-		offsetX = touchX - worldX * scale;
-		offsetY = touchY - worldY * scale;
-
-		lastTouchesDist = getTouchesDist(touch1, touch2);
-	
-		draw();
-	}
-	function mobileEnd()
-	{
-		isDragging = false;
-		isTouchZooming = false;
-	}
-	canvas.addEventListener('touchstart', function(e)
-	{
-		e.preventDefault();
-		if(e.touches.length == 1)
-		{
-			press(e.touches[0].clientX, e.touches[0].clientY);
-		}
-		else if(e.touches.length == 2)
-		{
-			mobileStartZoom(e.touches[0], e.touches[1]);
-		}
-	}, {passive: false});
-	canvas.addEventListener('touchmove', function(e)
-	{
-		e.preventDefault();
-		if(e.touches.length == 1)
-		{
-			move(e.touches[0].clientX, e.touches[0].clientY);
-		}
-		else if(e.touches.length == 2)
-		{
-			mobileZoom(e.touches[0], e.touches[1]);
-		}
-	}, {passive: false});
-	canvas.addEventListener('touchend', ()=>{mobileEnd()}, {passive: false});
-	canvas.addEventListener('touchcancel', ()=>{mobileEnd()}, {passive: false});
-
+	// Draw
 	draw();
 
-	// Enable configging
+	// Enable UI
 	config_container.classList.remove('hidden');
 	if(num_pages > 1)
 	{
 		multipage_help.classList.remove('hidden');
 		multipage_count.innerHTML = cropArray.current + '/' + cropArray.total;
 	}
-
-	if(!changed)
-	{
-		_c_preview_reset.addEventListener('click', ()=>
-		{
-			// pdf reset
-			scale = 1;
-			offsetX = 0;
-			offsetY = 0;
-			lastX = 0;
-			lastY = 0;
-			isDragging = false;
-			isTouchZooming = false;
-
-			// crop reset
-			resetCurrentCrop(vCanvas);
-
-			draw();
-		})
-
-		changed = true;
-	}
 }
+
+// -------------------- EVENT LISTENERS --------------------
+
+// -------------------- CANVAS LISTENERS -------------------
+
+// -------------------- PC IMPLEMENTATION ------------------
+canvas.addEventListener('wheel', (e)=>
+{
+	e.preventDefault();
+	zoom(e);
+});
+canvas.addEventListener('mousedown', (e)=>
+{
+	canvas.classList.add('grabbing');
+	const rect = canvas.getBoundingClientRect();
+	const mouseX = e.clientX - rect.left;
+	const mouseY = e.clientY - rect.top;
+
+	// Vertex grabbing
+	const cropX = cropRect.x * previewWindow.scale + previewWindow.offsetX;
+	const cropY = cropRect.y * previewWindow.scale + previewWindow.offsetY;
+	const cropW = cropRect.w * previewWindow.scale;
+	const cropH = cropRect.h * previewWindow.scale;
+	if(
+		mouseX >= cropX - previewWindow.scale - 10 &&
+		mouseX <= cropX + previewWindow.scale + 10 &&
+		mouseY >= cropY - previewWindow.scale - 10 &&
+		mouseY <= cropY + previewWindow.scale + 10)
+	{
+		cropRect.lastX = (mouseX - previewWindow.offsetX) / previewWindow.scale;
+		cropRect.lastY = (mouseY - previewWindow.offsetY) / previewWindow.scale;
+		cropRect.offsetX = 0;
+		cropRect.offsetY = 0;
+		cropRect.vertex = 1;
+		cropRect.dragging = true;
+	}
+	else if(
+		mouseX >= cropX + cropW - previewWindow.scale - 10 &&
+		mouseX <= cropX + cropW + previewWindow.scale + 10 &&
+		mouseY >= cropY - previewWindow.scale - 10 &&
+		mouseY <= cropY + previewWindow.scale + 10)
+	{
+		cropRect.lastX = (mouseX - previewWindow.offsetX) / previewWindow.scale;
+		cropRect.lastY = (mouseY - previewWindow.offsetY) / previewWindow.scale;
+		cropRect.offsetX = 0;
+		cropRect.offsetY = 0;
+		cropRect.vertex = 2;
+		cropRect.dragging = true;
+	}
+	else if(
+		mouseX >= cropX - previewWindow.scale - 10 &&
+		mouseX <= cropX + previewWindow.scale + 10 &&
+		mouseY >= cropY + cropH - previewWindow.scale - 10 &&
+		mouseY <= cropY + cropH + previewWindow.scale + 10)
+	{
+		cropRect.lastX = (mouseX - previewWindow.offsetX) / previewWindow.scale;
+		cropRect.lastY = (mouseY - previewWindow.offsetY) / previewWindow.scale;
+		cropRect.offsetX = 0;
+		cropRect.offsetY = 0;
+		cropRect.vertex = 3;
+		cropRect.dragging = true;
+	}
+	else if(
+		mouseX >= cropX + cropW - previewWindow.scale - 10 &&
+		mouseX <= cropX + cropW + previewWindow.scale + 10 &&
+		mouseY >= cropY + cropH - previewWindow.scale - 10 &&
+		mouseY <= cropY + cropH + previewWindow.scale + 10)
+	{
+		cropRect.lastX = (mouseX - previewWindow.offsetX) / previewWindow.scale;
+		cropRect.lastY = (mouseY - previewWindow.offsetY) / previewWindow.scale;
+		cropRect.offsetX = 0;
+		cropRect.offsetY = 0;
+		cropRect.vertex = 4;
+		cropRect.dragging = true;
+	}
+	// Other grabbing (panning)
+	else
+	{
+		press(e.clientX, e.clientY);
+	}
+});
+canvas.addEventListener('mousemove', (e)=>
+{
+	e.preventDefault();
+	const rect = canvas.getBoundingClientRect();
+	const mouseX = e.clientX - rect.left;
+	const mouseY = e.clientY - rect.top;
+
+	// Vertex grabbing
+	if(cropRect.dragging == true)
+	{
+		const newX = (mouseX - cropRect.offsetX - previewWindow.offsetX) / previewWindow.scale;
+		const newY = (mouseY - cropRect.offsetY - previewWindow.offsetY) / previewWindow.scale;
+		let dx = newX - cropRect.lastX;
+		let dy = newY - cropRect.lastY;
+
+		switch(cropRect.vertex)
+		{
+			case 1:
+				cropRect.x += dx;
+				cropRect.y += dy;
+				cropRect.w -= dx;
+				cropRect.h -= dy;
+				break;
+			case 2:
+				cropRect.y += dy;
+				cropRect.w += dx;
+				cropRect.h -= dy;
+				break;
+			case 3:
+				cropRect.x += dx;
+				cropRect.w -= dx;
+				cropRect.h += dy;
+				break;
+			case 4:
+				cropRect.w += dx;
+				cropRect.h += dy;
+				break;
+		}
+
+		cropRect.lastX = newX;
+		cropRect.lastY = newY;
+
+		draw();
+	}
+	// Maybe other grabbing (panning)
+	else
+	{
+		move(e.clientX, e.clientY);
+	}
+});
+canvas.addEventListener('mouseup', ()=>
+{
+	end();
+});
+canvas.addEventListener('mouseleave', ()=>
+{
+	end();
+});
+
+// -------------------- MOBILE IMPLEMENTATION --------------
+canvas.addEventListener('touchstart', function(e)
+{
+	e.preventDefault();
+	if(e.touches.length == 1)
+	{
+		press(e.touches[0].clientX, e.touches[0].clientY);
+	}
+	else if(e.touches.length == 2)
+	{
+		mobileStartZoom(e.touches[0], e.touches[1]);
+	}
+}, {passive: false});
+canvas.addEventListener('touchmove', function(e)
+{
+	e.preventDefault();
+	if(e.touches.length == 1)
+	{
+		move(e.touches[0].clientX, e.touches[0].clientY);
+	}
+	else if(e.touches.length == 2)
+	{
+		mobileZoom(e.touches[0], e.touches[1]);
+	}
+}, {passive: false});
+canvas.addEventListener('touchend', ()=>
+{
+	mobileEnd();
+}, {passive: false});
+canvas.addEventListener('touchcancel', ()=>
+{
+	mobileEnd();
+}, {passive: false});
+
+// ---------------------------------------------------------
+
+// -------------------- OTHER LISTENERS --------------------
+
+// High dpi config
+_c_highdpi.addEventListener('change', (e) =>
+{
+	if(e.target.checked)
+	{
+		CONST_DPI = 288;
+	}
+	else
+	{
+		CONST_DPI = 144;
+	}
+
+	// must reset everything
+});
 
 // View preview
 _c_preview_view.addEventListener('click', function()
@@ -467,6 +521,18 @@ _c_preview_view.addEventListener('click', function()
 	preview_container.classList.toggle('hidden');
 	main.classList.toggle('blurred');
 });
+
+// Reset preview
+_c_preview_reset.addEventListener('click', ()=>
+{
+	// preview reset
+	resetPreviewWindow();
+
+	// crop reset
+	resetCurrentCrop(vCanvas);
+
+	draw();
+})
 
 // Hide preview
 _c_preview_hide.addEventListener('click', function()
@@ -476,7 +542,7 @@ _c_preview_hide.addEventListener('click', function()
 	main.classList.toggle('blurred');
 });
 
-// Prev page preview
+// Multipage previous page
 multipage_prev.addEventListener('click', function()
 {
 	if(cropArray.current != 1)
@@ -489,7 +555,7 @@ multipage_prev.addEventListener('click', function()
 	}
 });
 
-// Next page preview
+// Multipage next page
 multipage_next.addEventListener('click', function()
 {
 	if(cropArray.current != cropArray.total)
@@ -532,19 +598,4 @@ action_button.addEventListener('click', function()
 		link.click();
 		URL.revokeObjectURL(link.href);
 	})();
-});
-
-// High dpi config
-highdpi.addEventListener('change', (e) =>
-{
-	if(e.target.checked)
-	{
-		CONST_DPI = 288;
-	}
-	else
-	{
-		CONST_DPI = 144;
-	}
-
-	// must reset everything
 });
