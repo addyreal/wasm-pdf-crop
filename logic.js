@@ -16,7 +16,25 @@ const action_button = document.getElementById('action_button');
 
 // Global
 var fileBuffer = null;
-var pageHeight = 0;
+var PDFDoc = null;
+var num_pages = 0;
+
+async function renderPDFPage(i)
+{
+	// Get page
+	const page = await PDFDoc.getPage(i);
+
+	// Set up canvases
+	const viewport = page.getViewport({scale: CONST_DPI/72});
+	canvas.width = viewport.width >= 600 ? 600 : viewport.width;
+	canvas.height = viewport.height >= 600 ? 600: viewport.height;
+	vCanvas.width = viewport.width;
+	vCanvas.height = viewport.height;
+
+	// Render page
+	const renderTask = page.render({canvasContext: vContext, viewport});
+	await renderTask.promise;
+}
 
 // -------------------- CANVAS -----------------------------
 
@@ -225,18 +243,22 @@ var cropArray =
 {
 	current: 1,
 	total: 1,
-	saved: [{a: 0, b: 0, c: 0, d: 0,},],
+	saved: [{x: 0, y: 0, w: 0, h: 0,},],
+	sizes: [{pw: 0, ph: 0}],
 };
 
 // Takes index you're on, saves ready values
-function saveCurrentCrop(height)
+function saveCurrentCrop(box)
 {
 	const arrIndex = cropArray.current - 1;
-	const a = Math.round(cropRect.x);
-	const b = height - Math.round(cropRect.h) - Math.round(cropRect.y);
-	const c = Math.round(cropRect.w);
-	const d = Math.round(cropRect.h);
-	cropArray.saved[arrIndex] = {a, b, c, d};
+	const x = cropRect.x;
+	const y = cropRect.y;
+	const w = cropRect.w;
+	const h = cropRect.h;
+	cropArray.saved[arrIndex] = {x, y, w, h};
+	const pw = box.width - 1;
+	const ph = box.height - 1;
+	cropArray.sizes[arrIndex] = {pw, ph};
 }
 
 // Resets current crop
@@ -257,13 +279,41 @@ function resetCurrentCrop(box)
 	};
 }
 
+// Restrores current crop
+function restoreCurrentCrop(index, box)
+{
+	// Exists saved crop
+	if(cropArray.saved[index - 1].w != 0)
+	{
+		cropRect =
+		{
+			x: cropArray.saved[index - 1].x,
+			y: cropArray.saved[index - 1].y,
+			w: cropArray.saved[index - 1].w,
+			h: cropArray.saved[index - 1].h,
+			lastX: 0,
+			lastY: 0,
+			offsetX: 0,
+			offsetY: 0,
+			vertex: 0,
+			dragging: false,
+		};
+	}
+	// Else just give default
+	else
+	{
+		resetCurrentCrop(box);
+	}
+}
+
 function resetCropArray(len)
 {
 	cropArray = 
 	{
 		current: 1,
 		total: len,
-		saved: Array.from({length: len}, () => ({a: 0, b: 0, c: 0, d: 0})),
+		saved: Array.from({length: len}, () => ({x: 0, y: 0, w: 0, h: 0})),
+		sizes: Array.from({length: len}, () => ({pw: 0, ph: 0})),
 	};
 }
 
@@ -277,41 +327,29 @@ pdf_input.onchange = async (e) =>
 	config_container.classList.add('hidden');
 	multipage_help.classList.add('hidden');
 
-	// File
+	// Get file
     const file = e.target.files[0];
 	if (!file) return;
 
-	// Buffer
+	// Get and copy file buffer
 	const arrBuffer = await file.arrayBuffer();
 	fileBuffer = arrBuffer.slice(0);
 
-	// Set up first pdf page
-	const pdf = await pdfjsLib.getDocument({data: arrBuffer}).promise;
-	const num_pages = pdf.numPages;
-    const page = await pdf.getPage(1);
+	// Load pdf
+	PDFDoc = await pdfjsLib.getDocument({data: arrBuffer}).promise;
 
-	// Set up canvases
-	const viewport = page.getViewport({scale: CONST_DPI/72});
-	canvas.width = viewport.width >= 600 ? 600 : viewport.width;
-	canvas.height = viewport.height >= 600 ? 600: viewport.height;
-	vCanvas.width = viewport.width;
-	vCanvas.height = viewport.height;
+	// Render 1st page
+	await renderPDFPage(1);
 
-	// height
-	pageHeight = viewport.height;
-
-	// Render first page
-	const renderTask = page.render({canvasContext: vContext, viewport});
-    await renderTask.promise;
-
-	// Set up a cropbox
+	// Reset cropbox
 	resetCurrentCrop(vCanvas);
-
-	// Initialize crop array
-	resetCropArray(num_pages);
 
 	// Reset preview window
 	resetPreviewWindow();
+
+	// Initialize crop array
+	num_pages = PDFDoc.numPages;
+	resetCropArray(num_pages);
 
 	// Draw
 	draw();
@@ -623,7 +661,9 @@ _c_highdpi.addEventListener('change', (e) =>
 		CONST_DPI = 144;
 	}
 
-	// must reset everything
+	// must reset everything, temp implementation - disable UI so user has to reupload
+	config_container.classList.add('hidden');
+	multipage_help.classList.add('hidden');
 });
 
 // View preview
@@ -648,33 +688,35 @@ _c_preview_reset.addEventListener('click', ()=>
 // Hide preview
 _c_preview_hide.addEventListener('click', function()
 {
-	saveCurrentCrop();
+	saveCurrentCrop(vCanvas);
 	preview_container.classList.toggle('hidden');
 	main.classList.toggle('blurred');
 });
 
 // Multipage previous page
-multipage_prev.addEventListener('click', function()
+multipage_prev.addEventListener('click', async function()
 {
 	if(cropArray.current != 1)
 	{
-		saveCurrentCrop();
-		// reset croprect
-		// render next page
+		saveCurrentCrop(vCanvas);
 		cropArray.current -= 1;
+		await renderPDFPage(cropArray.current);
+		restoreCurrentCrop(cropArray.current, vCanvas);
+		draw();
 		multipage_count.innerHTML = cropArray.current + '/' + cropArray.total;
 	}
 });
 
 // Multipage next page
-multipage_next.addEventListener('click', function()
+multipage_next.addEventListener('click', async function()
 {
 	if(cropArray.current != cropArray.total)
 	{
-		saveCurrentCrop();
-		// reset croprect
-		// render next page
+		saveCurrentCrop(vCanvas);
 		cropArray.current += 1;
+		await renderPDFPage(cropArray.current);
+		restoreCurrentCrop(cropArray.current, vCanvas);
+		draw();
 		multipage_count.innerHTML = cropArray.current + '/' + cropArray.total;
 	}
 });
@@ -686,22 +728,43 @@ action_button.addEventListener('click', function()
 	resizeOutput(outputElement);
 
 	(async() =>{
+		// Load PDF
 		const {PDFDocument} = PDFLib;
 		const pdfDoc = await PDFDocument.load(fileBuffer);
 
-		const page = pdfDoc.getPage(0);
+		// Conversion
 		const toPt = (px) => px * (72/CONST_DPI);
+		const toPx = (pt) => pt * (CONST_DPI/72);
 
-		const a = Math.round(cropRect.x);
-		const b = pageHeight - Math.round(cropRect.h) - Math.round(cropRect.y);
-		const c = Math.round(cropRect.w);
-		const d = Math.round(cropRect.h);
+		// Loop through all pages and apply a cropbox
+		for(let i = 1; i <= num_pages; i++)
+		{
+			const page = pdfDoc.getPage(i - 1);
+			const width = cropArray.sizes[i - 1].pw;
+			const height = cropArray.sizes[i - 1].ph;
+			
+			const savedCrop = cropArray.saved[i - 1];
 
-		page.setCropBox(toPt(a), toPt(b), toPt(c), toPt(d));
+			const a = Math.round(savedCrop.x);
+			const b = height - Math.round(savedCrop.h) - Math.round(savedCrop.y);
+			const c = Math.round(savedCrop.w);
+			const d = Math.round(savedCrop.h);
 
+			// Apply a crop that you atleast saved (or amounts to anything)
+			if(c != 0 && d != 0)
+			{
+				// Apply a meaningful crop
+				if(c != width && d != height)
+				{
+					page.setCropBox(toPt(a), toPt(b), toPt(c), toPt(d));
+				}
+			}
+		}
+
+		// Save the PDF
 		newBytes = await pdfDoc.save();
 
-		// bob
+		// Make bob
 		const bob = new Blob([newBytes], {type: 'application/pdf'});
 		const link = document.createElement('a');
 		link.href = URL.createObjectURL(bob);
