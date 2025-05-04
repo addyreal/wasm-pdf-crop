@@ -136,6 +136,7 @@ function getTouchesY(touch1, touch2)
 }
 function mobileStartZoom(touch1, touch2)
 {
+	cropRect.dragging = false;
 	previewWindow.isDragging = false;
 	previewWindow.isTouchZooming = true;
 	previewWindow.lastTouchesDist = getTouchesDist(touch1, touch2);
@@ -162,6 +163,7 @@ function mobileZoom(touch1, touch2)
 }
 function mobileEnd()
 {
+	cropRect.dragging = false;
 	previewWindow.isDragging = false;
 	previewWindow.isTouchZooming = false;
 }
@@ -468,7 +470,72 @@ canvas.addEventListener('touchstart', function(e)
 	e.preventDefault();
 	if(e.touches.length == 1)
 	{
-		press(e.touches[0].clientX, e.touches[0].clientY);
+		const rect = canvas.getBoundingClientRect();
+		const touchX = e.touches[0].clientX - rect.left;
+		const touchY = e.touches[0].clientY - rect.top;
+
+		// Vertex grabbing
+		const cropX = cropRect.x * previewWindow.scale + previewWindow.offsetX;
+		const cropY = cropRect.y * previewWindow.scale + previewWindow.offsetY;
+		const cropW = cropRect.w * previewWindow.scale;
+		const cropH = cropRect.h * previewWindow.scale;
+		if(
+			touchX >= cropX - previewWindow.scale - 20 &&
+			touchX <= cropX + previewWindow.scale + 20 &&
+			touchY >= cropY - previewWindow.scale - 20 &&
+			touchY <= cropY + previewWindow.scale + 20)
+		{
+			cropRect.lastX = (touchX - previewWindow.offsetX) / previewWindow.scale;
+			cropRect.lastY = (touchY - previewWindow.offsetY) / previewWindow.scale;
+			cropRect.offsetX = 0;
+			cropRect.offsetY = 0;
+			cropRect.vertex = 1;
+			cropRect.dragging = true;
+		}
+		else if(
+			touchX >= cropX + cropW - previewWindow.scale - 20 &&
+			touchX <= cropX + cropW + previewWindow.scale + 20 &&
+			touchY >= cropY - previewWindow.scale - 20 &&
+			touchY <= cropY + previewWindow.scale + 20)
+		{
+			cropRect.lastX = (touchX - previewWindow.offsetX) / previewWindow.scale;
+			cropRect.lastY = (touchY - previewWindow.offsetY) / previewWindow.scale;
+			cropRect.offsetX = 0;
+			cropRect.offsetY = 0;
+			cropRect.vertex = 2;
+			cropRect.dragging = true;
+		}
+		else if(
+			touchX >= cropX - previewWindow.scale - 20 &&
+			touchX <= cropX + previewWindow.scale + 20 &&
+			touchY >= cropY + cropH - previewWindow.scale - 20 &&
+			touchY <= cropY + cropH + previewWindow.scale + 20)
+		{
+			cropRect.lastX = (touchX - previewWindow.offsetX) / previewWindow.scale;
+			cropRect.lastY = (touchY - previewWindow.offsetY) / previewWindow.scale;
+			cropRect.offsetX = 0;
+			cropRect.offsetY = 0;
+			cropRect.vertex = 3;
+			cropRect.dragging = true;
+		}
+		else if(
+			touchX >= cropX + cropW - previewWindow.scale - 20 &&
+			touchX <= cropX + cropW + previewWindow.scale + 20 &&
+			touchY >= cropY + cropH - previewWindow.scale - 20 &&
+			touchY <= cropY + cropH + previewWindow.scale + 20)
+		{
+			cropRect.lastX = (touchX - previewWindow.offsetX) / previewWindow.scale;
+			cropRect.lastY = (touchY - previewWindow.offsetY) / previewWindow.scale;
+			cropRect.offsetX = 0;
+			cropRect.offsetY = 0;
+			cropRect.vertex = 4;
+			cropRect.dragging = true;
+		}
+		// Other grabbing (panning)
+		else
+		{
+			press(e.touches[0].clientX, e.touches[0].clientY);
+		}
 	}
 	else if(e.touches.length == 2)
 	{
@@ -480,7 +547,51 @@ canvas.addEventListener('touchmove', function(e)
 	e.preventDefault();
 	if(e.touches.length == 1)
 	{
-		move(e.touches[0].clientX, e.touches[0].clientY);
+		// Vertex grabbing
+		if(cropRect.dragging == true)
+		{
+			const rect = canvas.getBoundingClientRect();
+			const touchX = e.touches[0].clientX - rect.left;
+			const touchY = e.touches[0].clientY - rect.top;
+			const newX = (touchX - cropRect.offsetX - previewWindow.offsetX) / previewWindow.scale;
+			const newY = (touchY - cropRect.offsetY - previewWindow.offsetY) / previewWindow.scale;
+			let dx = newX - cropRect.lastX;
+			let dy = newY - cropRect.lastY;
+	
+			switch(cropRect.vertex)
+			{
+				case 1:
+					cropRect.x += dx;
+					cropRect.y += dy;
+					cropRect.w -= dx;
+					cropRect.h -= dy;
+					break;
+				case 2:
+					cropRect.y += dy;
+					cropRect.w += dx;
+					cropRect.h -= dy;
+					break;
+				case 3:
+					cropRect.x += dx;
+					cropRect.w -= dx;
+					cropRect.h += dy;
+					break;
+				case 4:
+					cropRect.w += dx;
+					cropRect.h += dy;
+					break;
+			}
+	
+			cropRect.lastX = newX;
+			cropRect.lastY = newY;
+	
+			draw();
+		}
+		// Maybe other grabbing (panning)
+		else
+		{
+			move(e.touches[0].clientX, e.touches[0].clientY);
+		}
 	}
 	else if(e.touches.length == 2)
 	{
