@@ -1,4 +1,4 @@
-name: Build and deploy
+name: Deploy
 
 on:
   push:
@@ -17,34 +17,19 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up emcc
-      uses: mymindstorm/setup-emsdk@v14
-      with:
-        version: latest
-
-    - name: Build C++
-      run: |
-        cd build
-        emcc ../src/*.cpp -I../includes -L../libs -s ALLOW_MEMORY_GROWTH=1 --bind -s EXPORTED_FUNCTIONS='[_main, _malloc, _free]' -s EXPORTED_RUNTIME_METHODS='[getValue]'
-        cd ..
-
-    - name: Copy index.html
+    - name: Copy index
       run: |
         cp index.html build/index.html
 
-    - name: Copy style.css
+    - name: Copy css
       run: |
         cp style.css build/style.css
 
-    - name: Copy module-init.js
-      run: |
-        cp module-init.js build/module-init.js
-
-    - name: Copy logic.js
+    - name: Copy js
       run: |
         cp logic.js build/logic.js
 
-    - name: Copy pdf stuff
+    - name: Copy libs
       run: |
         cp pdf.min.js build/pdf.min.js
         cp pdf.worker.min.js build/pdf.worker.min.js

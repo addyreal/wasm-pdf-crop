@@ -1,5 +1,6 @@
 // DOM
 const main = document.getElementById('main');
+const outputElement = document.getElementById('output');
 const pdf_input = document.getElementById('input');
 const _c_highdpi = document.getElementById('_c_highdpi');
 const preview_container = document.getElementById('preview_container');
@@ -35,6 +36,24 @@ async function renderPDFPage(i)
 	const renderTask = page.render({canvasContext: vContext, viewport});
 	await renderTask.promise;
 }
+
+// -------------------- OUTPUT -----------------------------
+
+function getLineCount(textarea)
+{
+    return textarea.value.split('\n').length - 1;
+}
+function resizeOutput(textarea)
+{
+	textarea.style.height = "calc(1.2rem * " + getLineCount(textarea) + " + 70px)";
+}
+function clearOutput(textarea)
+{
+	textarea.value = "";
+}
+clearOutput(outputElement);
+
+// ---------------------------------------------------------
 
 // -------------------- CANVAS -----------------------------
 
