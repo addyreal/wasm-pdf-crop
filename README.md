@@ -1,1 +1,1 @@
-# wasm-pdf-crop
+# web-utils-pdf-crop
