@@ -16,6 +16,7 @@ const multipage_count = document.getElementById('multipage_count');
 const action_button = document.getElementById('action_button');
 
 // Global
+var filename = "";
 var fileBuffer = null;
 var PDFDoc = null;
 var num_pages = 0;
@@ -350,6 +351,9 @@ pdf_input.onchange = async (e) =>
 	// Get file
     const file = e.target.files[0];
 	if (!file) return;
+
+	// Store filename
+	filename = file.name.replace(/\.pdf$/i, '');
 
 	// Get and copy file buffer
 	const arrBuffer = await file.arrayBuffer();
@@ -794,7 +798,7 @@ action_button.addEventListener('click', function()
 		const bob = new Blob([newBytes], {type: 'application/pdf'});
 		const link = document.createElement('a');
 		link.href = URL.createObjectURL(bob);
-		link.download = 'cropped.pdf';
+		link.download = filename + '-cropped' + '.pdf';
 		link.click();
 		URL.revokeObjectURL(link.href);
 	})();
