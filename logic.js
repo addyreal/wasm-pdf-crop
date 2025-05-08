@@ -19,6 +19,7 @@ const action_button = document.getElementById('action_button');
 var fileBuffer = null;
 var PDFDoc = null;
 var num_pages = 0;
+var renderInProgress = false;
 
 async function renderPDFPage(i)
 {
@@ -358,7 +359,9 @@ pdf_input.onchange = async (e) =>
 	PDFDoc = await pdfjsLib.getDocument({data: arrBuffer}).promise;
 
 	// Render 1st page
+	renderInProgress = true;
 	await renderPDFPage(1);
+	renderInProgress = false;
 
 	// Reset cropbox
 	resetCurrentCrop(vCanvas);
@@ -715,28 +718,32 @@ _c_preview_hide.addEventListener('click', function()
 // Multipage previous page
 multipage_prev.addEventListener('click', async function()
 {
-	if(cropArray.current != 1)
+	if(cropArray.current != 1 && !renderInProgress)
 	{
+		renderInProgress = true;
 		saveCurrentCrop(vCanvas);
 		cropArray.current -= 1;
 		await renderPDFPage(cropArray.current);
 		restoreCurrentCrop(cropArray.current, vCanvas);
 		draw();
 		multipage_count.innerHTML = cropArray.current + '/' + cropArray.total;
+		renderInProgress = false;
 	}
 });
 
 // Multipage next page
 multipage_next.addEventListener('click', async function()
 {
-	if(cropArray.current != cropArray.total)
+	if(cropArray.current != cropArray.total && !renderInProgress)
 	{
+		renderInProgress = true;
 		saveCurrentCrop(vCanvas);
 		cropArray.current += 1;
 		await renderPDFPage(cropArray.current);
 		restoreCurrentCrop(cropArray.current, vCanvas);
 		draw();
 		multipage_count.innerHTML = cropArray.current + '/' + cropArray.total;
+		renderInProgress = false;
 	}
 });
 
