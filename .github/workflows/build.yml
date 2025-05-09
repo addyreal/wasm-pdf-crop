@@ -17,6 +17,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18
+
+    - name: Install terser
+      run: npm install -g terser
+
     - name: Copy index
       run: |
         cp index.html build/index.html
@@ -25,9 +33,9 @@ jobs:
       run: |
         cp style.css build/style.css
 
-    - name: Copy js
+    - name: Copy compressed js
       run: |
-        cp logic.js build/logic.js
+        terser logic.js --compress --mangle -o build/logic.js
 
     - name: Copy libs
       run: |
